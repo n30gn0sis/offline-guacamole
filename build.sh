@@ -240,6 +240,19 @@ package_bundle() {
         root="$work_dir/guacamole-offline-${version}"
         mkdir -p "$root/images" "$root/initdb"
         cp -a "$BUNDLE_DIR"/. "$root/"
+        # Strip any builder-local secrets that install.sh may have written
+        # into bundle/ when run in place (e.g. by a developer testing
+        # locally): a live .env with a real Postgres password, and a
+        # generated TLS private key/cert under nginx/certs/. This must run
+        # before write_provenance/write_manifest below -- install.sh's
+        # configure_env()/generate_tls_cert() are deliberately idempotent
+        # and treat an existing .env or cert/key pair as "already
+        # configured", so if these ever leaked into a shipped bundle every
+        # site installing from it would silently adopt the same DB
+        # password and the same TLS private key. Neither path is
+        # guaranteed to exist (a fresh checkout that never had install.sh
+        # run in it has neither) so this must not be treated as failure.
+        rm -rf "$root/.env" "$root/nginx/certs"
 
         generate_schema "$root/initdb"
         save_images "$root/images"

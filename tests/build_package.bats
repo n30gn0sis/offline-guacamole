@@ -160,6 +160,36 @@ EOF
     grep -q 'provenance\.txt' "$root/manifest.sha256"
 }
 
+@test "package_bundle strips a stale local .env and TLS certs from the source bundle/ dir before checksumming" {
+    # Simulates a developer having run install.sh in place inside the repo
+    # before building a release: install.sh's configure_env()/
+    # generate_tls_cert() are deliberately idempotent and would silently
+    # adopt these as "already configured" on the install side, so they must
+    # never reach the shipped tree -- and must be stripped BEFORE
+    # write_manifest runs, not after, or they'd be checksummed as
+    # legitimate bundle content.
+    stub_docker
+    write_package_stub
+    echo "POSTGRES_PASSWORD=leaked-builder-secret" > "$BUNDLE_DIR/.env"
+    mkdir -p "$BUNDLE_DIR/nginx/certs"
+    echo "leaked private key material" > "$BUNDLE_DIR/nginx/certs/privkey.pem"
+    source build.sh
+    load_versions "$VERSIONS_FILE"
+    tarball="$(package_bundle "1.6.0")"
+
+    extract_dir="$BATS_TEST_TMPDIR/extracted_secrets"
+    mkdir -p "$extract_dir"
+    tar -xzf "$tarball" -C "$extract_dir"
+    root="$extract_dir/guacamole-offline-1.6.0"
+
+    [ ! -e "$root/.env" ]
+    [ ! -e "$root/nginx/certs/privkey.pem" ]
+    [ ! -e "$root/nginx/certs" ]
+    # The manifest must never have checksummed the leaked files in the
+    # first place (they must be stripped before write_manifest runs).
+    ! grep -q '\.env\|nginx/certs' "$root/manifest.sha256"
+}
+
 @test "package_bundle leaves no partial tarball in dist/ if schema generation fails" {
     stub_docker
     cat > "$STUB_BIN_DIR/docker_stub_script.sh" <<'EOF'
