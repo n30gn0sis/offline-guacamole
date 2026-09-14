@@ -1,0 +1,6 @@
+/dist/
+*.tar
+*.tar.gz
+.env
+/nginx/certs/
+*.log
