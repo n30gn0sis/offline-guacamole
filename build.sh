@@ -65,6 +65,27 @@ generate_schema() {
         || die "schema generation produced an empty file — check 'docker run --rm ${guac_ref} /opt/guacamole/bin/initdb.sh --postgresql' manually"
 }
 
+save_images() {
+    local out_dir="$1" name ref safe_name
+    mkdir -p "$out_dir"
+    for name in $(all_component_names); do
+        ref="$(image_ref "$name")"
+        safe_name="$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]')"
+        log_info "Saving ${ref} -> ${out_dir}/${safe_name}.tar"
+        docker save "${ref}" -o "${out_dir}/${safe_name}.tar" || die "Failed to save ${ref} to ${out_dir}/${safe_name}.tar"
+    done
+}
+
+write_manifest() {
+    local root_dir="$1"
+    (
+        cd "$root_dir" || exit 1
+        find . -type f ! -name 'manifest.sha256' -print0 \
+            | sort -z \
+            | xargs -0 sha256sum
+    ) > "$root_dir/manifest.sha256" || die "Failed to write manifest.sha256 in ${root_dir}"
+}
+
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     echo "build.sh: not yet implemented past version loading" >&2
     exit 1
