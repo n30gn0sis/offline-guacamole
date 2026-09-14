@@ -82,6 +82,9 @@ generate_tls_cert() {
         log_info "TLS certificate already present at ${CERT_DIR} — leaving it in place"
         return 0
     fi
+    if [[ -f "$cert" || -f "$key" ]]; then
+        die "Found only one of fullchain.pem/privkey.pem in ${CERT_DIR} — remove the stray file or supply the matching one before re-running install.sh"
+    fi
     mkdir -p "$CERT_DIR"
     log_info "Generating a self-signed TLS certificate (365 days) at ${CERT_DIR}"
     openssl req -x509 -nodes -newkey rsa:2048 \

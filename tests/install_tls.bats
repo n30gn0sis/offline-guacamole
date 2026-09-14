@@ -26,3 +26,23 @@ setup() {
     grep -q "existing-cert" "$CERT_DIR/fullchain.pem"
     grep -q "existing-key" "$CERT_DIR/privkey.pem"
 }
+
+@test "generate_tls_cert dies if only cert exists (partial pair)" {
+    mkdir -p "$CERT_DIR"
+    echo "existing-cert" > "$CERT_DIR/fullchain.pem"
+    source bundle/install.sh
+    run generate_tls_cert
+    [ "$status" -ne 0 ]
+    grep -q "existing-cert" "$CERT_DIR/fullchain.pem"
+    [ ! -f "$CERT_DIR/privkey.pem" ]
+}
+
+@test "generate_tls_cert dies if only key exists (partial pair)" {
+    mkdir -p "$CERT_DIR"
+    echo "existing-key" > "$CERT_DIR/privkey.pem"
+    source bundle/install.sh
+    run generate_tls_cert
+    [ "$status" -ne 0 ]
+    grep -q "existing-key" "$CERT_DIR/privkey.pem"
+    [ ! -f "$CERT_DIR/fullchain.pem" ]
+}
