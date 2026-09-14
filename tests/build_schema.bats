@@ -55,3 +55,16 @@ EOF
     [ "$status" -ne 0 ]
     [[ "$output" == *"empty"* ]]
 }
+
+@test "generate_schema dies if docker run fails" {
+    stub_docker
+    cat > "$STUB_BIN_DIR/docker_stub_script.sh" <<'EOF'
+exit 1
+EOF
+    export DOCKER_STUB_SCRIPT="$STUB_BIN_DIR/docker_stub_script.sh"
+    source build.sh
+    load_versions "$VERSIONS_FILE"
+    run generate_schema "$BATS_TEST_TMPDIR/initdb3"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"Failed to run initdb.sh"* ]]
+}

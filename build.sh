@@ -59,7 +59,8 @@ generate_schema() {
     # `docker run --rm <ref> find / -name initdb.sh` will locate it —
     # update this path accordingly.
     docker run --rm "${guac_ref}" /opt/guacamole/bin/initdb.sh --postgresql \
-        > "$out_dir/001-schema.sql"
+        > "$out_dir/001-schema.sql" \
+        || die "Failed to run initdb.sh in ${guac_ref}"
     [[ -s "$out_dir/001-schema.sql" ]] \
         || die "schema generation produced an empty file — check 'docker run --rm ${guac_ref} /opt/guacamole/bin/initdb.sh --postgresql' manually"
 }
