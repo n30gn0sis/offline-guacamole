@@ -49,6 +49,21 @@ pull_images() {
     done
 }
 
+generate_schema() {
+    local out_dir="$1" guac_ref
+    guac_ref="$(image_ref GUACAMOLE)"
+    mkdir -p "$out_dir"
+    log_info "Generating Postgres schema from ${guac_ref}"
+    # NOTE: /opt/guacamole/bin/initdb.sh is the path used by the official
+    # guacamole/guacamole image as of 1.6.0. If a future version moves it,
+    # `docker run --rm <ref> find / -name initdb.sh` will locate it —
+    # update this path accordingly.
+    docker run --rm "${guac_ref}" /opt/guacamole/bin/initdb.sh --postgresql \
+        > "$out_dir/001-schema.sql"
+    [[ -s "$out_dir/001-schema.sql" ]] \
+        || die "schema generation produced an empty file — check 'docker run --rm ${guac_ref} /opt/guacamole/bin/initdb.sh --postgresql' manually"
+}
+
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     echo "build.sh: not yet implemented past version loading" >&2
     exit 1
