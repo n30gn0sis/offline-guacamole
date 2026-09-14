@@ -13,7 +13,6 @@ stub_docker() {
 printf '%s\n' "$*" >> "$DOCKER_LOG"
 if [[ -n "${DOCKER_STUB_SCRIPT:-}" ]]; then
     bash "$DOCKER_STUB_SCRIPT" "$@"
-    exit $?
 else
     exit 0
 fi
