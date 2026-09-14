@@ -94,6 +94,17 @@ generate_tls_cert() {
     chmod 600 "$key"
 }
 
+load_images() {
+    local tar_file found=0
+    for tar_file in "$IMAGES_DIR"/*.tar; do
+        [[ -e "$tar_file" ]] || continue
+        found=1
+        log_info "Loading $(basename "$tar_file")"
+        docker load -i "$tar_file"
+    done
+    [[ "$found" -eq 1 ]] || die "No image tars found in ${IMAGES_DIR} — the bundle may be corrupt or incomplete."
+}
+
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     echo "install.sh: not yet fully implemented" >&2
     exit 1
