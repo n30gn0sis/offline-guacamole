@@ -48,6 +48,21 @@ preflight_checks() {
     check_disk_space "$SCRIPT_DIR"
 }
 
+verify_manifest() {
+    local root="$1" manifest="$1/manifest.sha256" err_file
+    [[ -f "$manifest" ]] \
+        || die "manifest.sha256 not found in ${root} — the bundle may be corrupt or incomplete."
+    err_file="$(mktemp)"
+    log_info "Verifying bundle integrity against manifest.sha256"
+    if ! (cd "$root" && sha256sum -c manifest.sha256) >"$err_file" 2>&1; then
+        log_error "Checksum verification failed — the following file(s) are missing or modified:"
+        grep -v ': OK$' "$err_file" >&2 || true
+        rm -f "$err_file"
+        die "Bundle integrity check failed. Re-copy the bundle from a trusted source and retry."
+    fi
+    rm -f "$err_file"
+}
+
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     echo "install.sh: not yet fully implemented" >&2
     exit 1
