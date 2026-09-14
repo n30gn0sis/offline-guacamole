@@ -76,6 +76,21 @@ configure_env() {
     log_info "Generated ${ENV_FILE} with a random Postgres password (mode 600)"
 }
 
+generate_tls_cert() {
+    local cert="$CERT_DIR/fullchain.pem" key="$CERT_DIR/privkey.pem"
+    if [[ -f "$cert" && -f "$key" ]]; then
+        log_info "TLS certificate already present at ${CERT_DIR} — leaving it in place"
+        return 0
+    fi
+    mkdir -p "$CERT_DIR"
+    log_info "Generating a self-signed TLS certificate (365 days) at ${CERT_DIR}"
+    openssl req -x509 -nodes -newkey rsa:2048 \
+        -keyout "$key" -out "$cert" -days 365 \
+        -subj "/CN=guacamole.local" \
+        >/dev/null 2>&1
+    chmod 600 "$key"
+}
+
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     echo "install.sh: not yet fully implemented" >&2
     exit 1
