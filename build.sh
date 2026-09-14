@@ -135,7 +135,57 @@ EOF
 }
 
 run_selftest() {
-    die "run_selftest is not implemented yet (see Task 15)"
+    # The whole selftest body runs in a subshell so cleanup is tied to
+    # actual (sub)shell termination via an EXIT trap, not a function RETURN
+    # trap. A RETURN trap only fires when a function returns normally (via
+    # `return`, or falling off the end) -- NOT when `exit` is called, be it
+    # directly, via `die`, or via `set -e`/errexit, while that function is
+    # still on the call stack (verified empirically: a RETURN trap set in a
+    # function that instead exits via `die`/errexit never fires at all).
+    # Nearly every failure path below goes through `die` or an unguarded
+    # command under errexit, so a bare RETURN trap here would only ever run
+    # on success -- leaving the extracted tarball, and possibly a running
+    # compose stack bound to ports 80/443, behind on every failure. This is
+    # a different problem from Task 6's RETURN-trap issue (which was
+    # specific to bats' functrace option); this one is plain bash trap
+    # semantics and applies with no bats involved.
+    #
+    # Unlike `package_bundle`, this subshell is a bare statement (not the
+    # left side of `||`), so `set -e` still propagates into it exactly as
+    # it would without the subshell -- the unguarded `tar`/`install.sh`
+    # calls below still abort immediately on failure, same as they would
+    # without this wrapping.
+    (
+        # Note: this local is named `bundle_root`, not `root` as in the
+        # brief, purely to avoid a shellcheck SC2030/SC2031 false positive
+        # -- shellcheck otherwise cross-links it with package_bundle's own
+        # unrelated local `root` (different function, different subshell)
+        # purely because they share a name. No behavior change.
+        local tarball="$1" extract_dir bundle_root
+
+        extract_dir="$(mktemp -d "${TMPDIR:-/tmp}/guac-selftest.XXXXXX")"
+        trap 'rm -rf "$extract_dir"; ( cd "$bundle_root" 2>/dev/null && docker compose -f docker-compose.yml down -v ) 2>/dev/null || true' EXIT
+
+        log_info "Selftest: extracting $tarball"
+        tar -xzf "$tarball" -C "$extract_dir"
+        bundle_root="$(find "$extract_dir" -maxdepth 1 -mindepth 1 -type d | head -1)"
+
+        log_info "Selftest: running install.sh against the extracted bundle"
+        ( cd "$bundle_root" && ./install.sh )
+
+        log_info "Selftest: checking the login page over HTTPS"
+        curl -fsSk "https://127.0.0.1/guacamole/" >/dev/null \
+            || die "Selftest failed: login page did not respond over HTTPS"
+
+        log_info "Selftest: logging in as guacadmin via the API to confirm the schema initialized"
+        local token
+        token="$(curl -fsSk -X POST "https://127.0.0.1/guacamole/api/tokens" \
+            -d "username=guacadmin&password=guacadmin" \
+            | grep -o '"authToken":"[^"]*"' | cut -d'"' -f4)"
+        [[ -n "$token" ]] || die "Selftest failed: could not obtain an authToken for guacadmin — schema may not have initialized"
+
+        log_info "Selftest passed: $tarball is a valid release"
+    )
 }
 
 main() {
