@@ -40,6 +40,15 @@ image_ref() {
     printf '%s:%s@%s' "${!repo_var}" "${!tag_var}" "${!digest_var}"
 }
 
+pull_images() {
+    local name ref
+    for name in $(all_component_names); do
+        ref="$(image_ref "$name")"
+        log_info "Pulling ${ref}"
+        docker pull "${ref}" || die "Failed to pull ${ref}"
+    done
+}
+
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     echo "build.sh: not yet implemented past version loading" >&2
     exit 1
