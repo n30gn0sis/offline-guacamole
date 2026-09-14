@@ -105,7 +105,70 @@ load_images() {
     [[ "$found" -eq 1 ]] || die "No image tars found in ${IMAGES_DIR} — the bundle may be corrupt or incomplete."
 }
 
+compose_up() {
+    ( cd "$SCRIPT_DIR" && docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d ) \
+        || die "Failed to bring up the compose stack"
+}
+
+wait_healthy() {
+    local timeout="${1:-180}" elapsed=0 services svc cid status unhealthy
+
+    services="$(cd "$SCRIPT_DIR" && docker compose -f "$COMPOSE_FILE" config --services)" \
+        || die "Failed to determine compose services"
+    log_info "Waiting up to ${timeout}s for all services to report healthy"
+
+    while (( elapsed < timeout )); do
+        unhealthy=0
+        for svc in $services; do
+            cid="$(cd "$SCRIPT_DIR" && docker compose -f "$COMPOSE_FILE" ps -q "$svc")"
+            if [[ -z "$cid" ]]; then
+                unhealthy=1
+                continue
+            fi
+            status="$(docker inspect --format '{{.State.Health.Status}}' "$cid" 2>/dev/null || echo "unknown")"
+            [[ "$status" == "healthy" ]] || unhealthy=1
+        done
+        if [[ "$unhealthy" -eq 0 ]]; then
+            log_info "All services healthy"
+            return 0
+        fi
+        sleep 3
+        elapsed=$((elapsed + 3))
+    done
+
+    log_error "Timed out waiting for services to become healthy. Current status:"
+    ( cd "$SCRIPT_DIR" && docker compose -f "$COMPOSE_FILE" ps ) >&2 || true
+    for svc in $services; do
+        log_error "  -> run: (cd ${SCRIPT_DIR} && docker compose logs ${svc})"
+    done
+    die "Stack did not become healthy within ${timeout}s"
+}
+
+print_summary() {
+    cat <<'EOF'
+
+Guacamole is up.
+
+  URL:    https://<this-host>/guacamole/
+  Login:  guacadmin / guacadmin
+
+  *** CHANGE THE DEFAULT guacadmin PASSWORD NOW ***
+  Settings -> Users -> guacadmin -> change password, immediately after first login.
+
+EOF
+}
+
+main() {
+    preflight_checks
+    verify_manifest "$SCRIPT_DIR"
+    load_images
+    configure_env
+    generate_tls_cert
+    compose_up
+    wait_healthy 180
+    print_summary
+}
+
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    echo "install.sh: not yet fully implemented" >&2
-    exit 1
+    main "$@"
 fi
