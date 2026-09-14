@@ -86,7 +86,80 @@ write_manifest() {
     ) > "$root_dir/manifest.sha256" || die "Failed to write manifest.sha256 in ${root_dir}"
 }
 
+package_bundle() {
+    local version="$1" work_dir root date_stamp tarball_name
+    date_stamp="$(date -u +%Y%m%d)"
+    tarball_name="guacamole-offline-${version}-${date_stamp}.tar.gz"
+
+    # The work_dir/root assembly runs in a subshell so its cleanup trap is an
+    # EXIT trap, not a RETURN trap: under `set -T` (functrace, e.g. bats'
+    # `set -eET` test runner) a RETURN trap set here would be inherited by
+    # every nested function call this makes (generate_schema, image_ref, ...)
+    # and fire the moment any of THEM returns, deleting work_dir mid-build.
+    # EXIT firing is tied to actual (sub)shell termination, not per-function
+    # return, so it isn't subject to that inheritance and fires exactly once,
+    # when this subshell finishes.
+    (
+        work_dir="$(mktemp -d "${TMPDIR:-/tmp}/guac-build.XXXXXX")"
+        trap 'rm -rf "$work_dir"' EXIT
+
+        root="$work_dir/guacamole-offline-${version}"
+        mkdir -p "$root/images" "$root/initdb"
+        cp -a "$BUNDLE_DIR"/. "$root/"
+
+        generate_schema "$root/initdb"
+        save_images "$root/images"
+        write_manifest "$root"
+
+        mkdir -p "$DIST_DIR"
+        tar -C "$work_dir" -czf "$DIST_DIR/${tarball_name}.partial" "guacamole-offline-${version}"
+    ) || die "Failed to assemble bundle for version ${version}"
+    # The explicit `|| die` above (rather than relying on `set -e` to abort
+    # package_bundle when the subshell fails) matters because callers that
+    # invoke this via bats' `run` helper have errexit disabled for the
+    # duration of the call (`run` does `set +eET`) — without it, a failure
+    # inside the subshell would be silently ignored and execution would fall
+    # through to `mv` a `.partial` file that was never written.
+    mv "$DIST_DIR/${tarball_name}.partial" "$DIST_DIR/${tarball_name}"
+    log_info "Bundle written to $DIST_DIR/${tarball_name}"
+    printf '%s\n' "$DIST_DIR/${tarball_name}"
+}
+
+usage() {
+    cat <<EOF
+Usage: $(basename "${BASH_SOURCE[0]}") [--selftest]
+
+Builds the offline Guacamole bundle described by versions.env into dist/.
+--selftest also unpacks the result and runs install.sh against it locally.
+EOF
+}
+
+run_selftest() {
+    die "run_selftest is not implemented yet (see Task 15)"
+}
+
+main() {
+    local selftest=0 version
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --selftest) selftest=1 ;;
+            -h|--help) usage; exit 0 ;;
+            *) die "Unknown argument: $1 (see --help)" ;;
+        esac
+        shift
+    done
+
+    load_versions "$VERSIONS_FILE"
+    version="$GUACAMOLE_TAG"
+    pull_images
+    local tarball
+    tarball="$(package_bundle "$version")"
+
+    if [[ "$selftest" -eq 1 ]]; then
+        run_selftest "$tarball"
+    fi
+}
+
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    echo "build.sh: not yet implemented past version loading" >&2
-    exit 1
+    main "$@"
 fi
