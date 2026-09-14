@@ -2,5 +2,11 @@
 *.tar
 *.tar.gz
 .env
-/nginx/certs/
+# '**/' on purpose, not '/nginx/certs/' and not 'nginx/certs/': install.sh
+# writes the generated TLS private key to nginx/certs/ relative to wherever
+# the bundle lives, which is bundle/nginx/certs/ when install.sh is run in
+# place inside this repo. A leading slash anchors to the repo root, and a
+# pattern with a separator anywhere in the middle is ALSO treated as
+# root-relative by git — so both of those forms miss bundle/nginx/certs/.
+**/nginx/certs/
 *.log
