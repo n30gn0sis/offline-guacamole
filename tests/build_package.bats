@@ -20,7 +20,17 @@ NGINX_DIGEST=sha256:444444444444444444444444444444444444444444444444444444444444
 EOF
     export BUNDLE_DIR="$BATS_TEST_TMPDIR/bundle"
     mkdir -p "$BUNDLE_DIR/nginx"
-    echo "compose" > "$BUNDLE_DIR/docker-compose.yml"
+    cat > "$BUNDLE_DIR/docker-compose.yml" <<'EOF'
+services:
+  postgres:
+    image: __POSTGRES_IMAGE_REF__
+  guacd:
+    image: __GUACD_IMAGE_REF__
+  guacamole:
+    image: __GUACAMOLE_IMAGE_REF__
+  nginx:
+    image: __NGINX_IMAGE_REF__
+EOF
     echo "install" > "$BUNDLE_DIR/install.sh"
     export DIST_DIR="$BATS_TEST_TMPDIR/dist"
 }
@@ -29,27 +39,32 @@ teardown() {
     unstub_docker
 }
 
-@test "package_bundle produces a checksummed, self-consistent tarball" {
-    stub_docker
+# Emulate the side effects package_bundle depends on: `docker run` prints a
+# schema on stdout, and `docker save <ref> -o <file>` writes a real image
+# archive at <file> whose manifest.json records RepoTags for <ref>.
+write_package_stub() {
     cat > "$STUB_BIN_DIR/docker_stub_script.sh" <<'EOF'
 if [[ "$1" == "run" ]]; then
     echo "-- fake schema"
 elif [[ "$1" == "save" ]]; then
-    # Real `docker save ... -o FILE` has docker itself write FILE; this stub
-    # doesn't run real docker, so emulate that one side effect: touch
-    # whatever path follows a trailing `-o` so package_bundle sees a real
-    # (if empty) file at the path save_images told docker to write to.
-    prev=""
+    ref="$2"; prev=""; out=""
     for arg in "$@"; do
-        if [[ "$prev" == "-o" ]]; then
-            touch "$arg"
-        fi
+        [[ "$prev" == "-o" ]] && out="$arg"
         prev="$arg"
     done
+    d="$(mktemp -d)"
+    printf '[{"Config":"config.json","RepoTags":["%s"],"Layers":[]}]' "$ref" > "$d/manifest.json"
+    tar -C "$d" -cf "$out" manifest.json
+    rm -rf "$d"
 fi
 exit 0
 EOF
     export DOCKER_STUB_SCRIPT="$STUB_BIN_DIR/docker_stub_script.sh"
+}
+
+@test "package_bundle produces a checksummed, self-consistent tarball" {
+    stub_docker
+    write_package_stub
     source build.sh
     load_versions "$VERSIONS_FILE"
     tarball="$(package_bundle "1.6.0")"
@@ -64,8 +79,85 @@ EOF
     [ -f "$root/install.sh" ]
     [ -f "$root/initdb/001-schema.sql" ]
     [ -f "$root/images/guacamole.tar" ]
+    [ -f "$root/provenance.txt" ]
     [ -f "$root/manifest.sha256" ]
     (cd "$root" && sha256sum -c manifest.sha256)
+}
+
+@test "package_bundle substitutes every image placeholder in the packaged compose file" {
+    stub_docker
+    write_package_stub
+    source build.sh
+    load_versions "$VERSIONS_FILE"
+    tarball="$(package_bundle "1.6.0")"
+    extract_dir="$BATS_TEST_TMPDIR/extracted_sub"
+    mkdir -p "$extract_dir"
+    tar -xzf "$tarball" -C "$extract_dir"
+    compose="$extract_dir/guacamole-offline-1.6.0/docker-compose.yml"
+
+    ! grep -q '__[A-Z0-9_]*_IMAGE_REF__' "$compose"
+    grep -q '^    image: guacamole/guacamole:1.6.0$' "$compose"
+    grep -q '^    image: guacamole/guacd:1.6.0$' "$compose"
+    grep -q '^    image: postgres:16-alpine$' "$compose"
+    grep -q '^    image: nginx:1.27-alpine$' "$compose"
+    # ...and never a digest-suffixed ref, which docker load cannot address
+    ! grep -q '^    image: .*@sha256:' "$compose"
+}
+
+@test "package_bundle dies if a compose image placeholder is missing" {
+    stub_docker
+    write_package_stub
+    sed -i 's/__NGINX_IMAGE_REF__/nginx:hardcoded/' "$BUNDLE_DIR/docker-compose.yml"
+    source build.sh
+    load_versions "$VERSIONS_FILE"
+    run package_bundle "1.6.0"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"__NGINX_IMAGE_REF__"* ]]
+    [[ "$output" == *"single source of truth"* ]]
+    [ ! -d "$DIST_DIR" ] || [ -z "$(ls -A "$DIST_DIR" 2>/dev/null)" ]
+}
+
+@test "package_bundle dies if the compose file asks for an image that was not saved" {
+    # The cross-check that ties the save side and the compose side together:
+    # an image reference in the compose file that no saved tar provides must
+    # fail the build rather than ship a bundle that pulls from a registry.
+    stub_docker
+    write_package_stub
+    cat >> "$BUNDLE_DIR/docker-compose.yml" <<'EOF'
+  extra:
+    image: never/saved:9.9
+EOF
+    source build.sh
+    load_versions "$VERSIONS_FILE"
+    run package_bundle "1.6.0"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"asks for image"* ]]
+    [[ "$output" == *"never/saved:9.9"* ]]
+    [ ! -d "$DIST_DIR" ] || [ -z "$(ls -A "$DIST_DIR" 2>/dev/null)" ]
+}
+
+@test "package_bundle writes a provenance record covered by the manifest" {
+    stub_docker
+    write_package_stub
+    source build.sh
+    load_versions "$VERSIONS_FILE"
+    tarball="$(package_bundle "1.6.0")"
+    extract_dir="$BATS_TEST_TMPDIR/extracted_prov"
+    mkdir -p "$extract_dir"
+    tar -xzf "$tarball" -C "$extract_dir"
+    root="$extract_dir/guacamole-offline-1.6.0"
+    prov="$root/provenance.txt"
+
+    grep -q '^bundle_version=1\.6\.0$' "$prov"
+    grep -qE '^built_at_utc=[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$' "$prov"
+    grep -qE '^built_from_git_rev=.+$' "$prov"
+    grep -q '^guacamole_repo=guacamole/guacamole$' "$prov"
+    grep -q '^guacamole_tag=1\.6\.0$' "$prov"
+    grep -q '^guacamole_digest=sha256:1111' "$prov"
+    grep -q '^nginx_digest=sha256:4444' "$prov"
+    grep -q '^postgres_tar=images/postgres\.tar$' "$prov"
+    # provenance.txt must be inside the manifest's coverage
+    grep -q 'provenance\.txt' "$root/manifest.sha256"
 }
 
 @test "package_bundle leaves no partial tarball in dist/ if schema generation fails" {

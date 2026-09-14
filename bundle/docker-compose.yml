@@ -1,6 +1,18 @@
+# NOTE: the __*_IMAGE_REF__ markers below are placeholders in the repo copy
+# of this file. build.sh's package_bundle() substitutes each one with the
+# concrete repo:tag from versions.env when it assembles a bundle, so the
+# shipped docker-compose.yml carries real image references and versions.env
+# stays the single source of truth. Do not hardcode image references here.
+#
+# pull_policy: never is deliberate — this stack must run with no registry
+# access at all. If an image is missing locally, compose fails immediately
+# with a clear error instead of quietly reaching out to a registry (which
+# would also hide exactly this class of packaging bug from build.sh
+# --selftest on a connected build machine).
 services:
   postgres:
-    image: postgres:${POSTGRES_TAG:-16-alpine}
+    image: __POSTGRES_IMAGE_REF__
+    pull_policy: never
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
@@ -17,7 +29,8 @@ services:
     networks: [guac-net]
 
   guacd:
-    image: guacamole/guacd:${GUACD_TAG:-1.6.0}
+    image: __GUACD_IMAGE_REF__
+    pull_policy: never
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/4822' || exit 1"]
@@ -27,7 +40,8 @@ services:
     networks: [guac-net]
 
   guacamole:
-    image: guacamole/guacamole:${GUACAMOLE_TAG:-1.6.0}
+    image: __GUACAMOLE_IMAGE_REF__
+    pull_policy: never
     restart: unless-stopped
     depends_on:
       postgres:
@@ -48,7 +62,8 @@ services:
     networks: [guac-net]
 
   nginx:
-    image: nginx:${NGINX_TAG:-1.27-alpine}
+    image: __NGINX_IMAGE_REF__
+    pull_policy: never
     restart: unless-stopped
     depends_on:
       guacamole:
