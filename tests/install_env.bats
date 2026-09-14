@@ -23,6 +23,19 @@ EOF
     grep -q '^POSTGRES_PASSWORD=' "$ENV_FILE"
 }
 
+@test "configure_env creates .env already mode 600, without relying on the chmod" {
+    # Closes the TOCTOU window: on a multi-user host the database password
+    # must never be readable by other users, not even between the write and
+    # the chmod. Neuter chmod so only the umask can be responsible.
+    source bundle/install.sh
+    chmod() { :; }
+    umask 022
+    run configure_env
+    [ "$status" -eq 0 ]
+    [ -f "$ENV_FILE" ]
+    [ "$(stat -c '%a' "$ENV_FILE")" = "600" ]
+}
+
 @test "configure_env leaves an existing .env untouched on re-run" {
     echo "POSTGRES_PASSWORD=already-set" > "$ENV_FILE"
     source bundle/install.sh
