@@ -63,6 +63,19 @@ verify_manifest() {
     rm -f "$err_file"
 }
 
+configure_env() {
+    if [[ -f "$ENV_FILE" ]]; then
+        log_info ".env already exists at ${ENV_FILE} — leaving existing configuration untouched"
+        return 0
+    fi
+    [[ -f "$ENV_TEMPLATE" ]] || die "env.template not found at ${ENV_TEMPLATE}"
+    local pg_password
+    pg_password="$(openssl rand -base64 24)"
+    sed "s|__POSTGRES_PASSWORD__|${pg_password}|" "$ENV_TEMPLATE" > "$ENV_FILE"
+    chmod 600 "$ENV_FILE"
+    log_info "Generated ${ENV_FILE} with a random Postgres password (mode 600)"
+}
+
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     echo "install.sh: not yet fully implemented" >&2
     exit 1
