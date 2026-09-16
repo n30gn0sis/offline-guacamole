@@ -205,3 +205,24 @@ EOF
     [ "$status" -ne 0 ]
     [ ! -d "$DIST_DIR" ] || [ -z "$(ls -A "$DIST_DIR" 2>/dev/null)" ]
 }
+
+@test "stage_bundle_tree produces the staged tree alone: copied, stripped, schema generated, compose concrete, no tars" {
+    stub_docker
+    write_package_stub
+    touch "$BUNDLE_DIR/.env"
+    mkdir -p "$BUNDLE_DIR/nginx/certs" && touch "$BUNDLE_DIR/nginx/certs/privkey.pem"
+    source build.sh
+    load_versions "$VERSIONS_FILE"
+    root="$BATS_TEST_TMPDIR/staged"
+    run stage_bundle_tree "$root"
+    [ "$status" -eq 0 ]
+    [ -f "$root/install.sh" ]
+    [ -s "$root/initdb/001-schema.sql" ]
+    [ ! -e "$root/.env" ]
+    [ ! -e "$root/nginx/certs" ]
+    ! grep -q '__[A-Z]*_IMAGE_REF__' "$root/docker-compose.yml"
+    grep -q 'image: guacamole/guacamole:1.6.0' "$root/docker-compose.yml"
+    [ -d "$root/images" ]
+    [ -z "$(ls -A "$root/images")" ]
+    ! grep -q "^save" "$DOCKER_LOG"
+}

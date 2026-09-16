@@ -63,5 +63,20 @@ bats tests/*.bats
 shellcheck build.sh bundle/install.sh
 ```
 
+While editing anything under `bundle/` (compose file, nginx config,
+`env.template`, the schema step), run
+
+```bash
+./build.sh --run-local
+```
+
+instead of a full build. It pulls the pinned images (a no-op once cached),
+stages `bundle/` into a temp directory exactly as packaging would, brings the
+stack up with `docker compose up --wait`, checks the HTTPS login page and an
+API login as `guacadmin`, then tears everything down including the database
+volume. Nothing is saved, tarred, or written into `bundle/` or `dist/`, and
+ports 80/443 must be free. It does not exercise `install.sh` — that is what
+`--selftest` is for, and `--selftest` remains the release gate.
+
 See `docs/superpowers/specs/2026-09-14-offline-guacamole-design.md` for the
 full design rationale.

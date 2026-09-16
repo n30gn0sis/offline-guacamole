@@ -220,6 +220,34 @@ write_manifest() {
     ) > "$root_dir/manifest.sha256" || die "Failed to write manifest.sha256 in ${root_dir}"
 }
 
+# Assemble the bundle's static content under $root: copy bundle/, strip
+# anything builder-local, generate the schema, and make the compose file
+# concrete. This is the single definition of "what the bundle contains" for
+# both packaging (package_bundle) and the local pre-package run (run_local)
+# -- the two must never stage a different tree, or a local run would prove
+# nothing about what gets shipped.
+stage_bundle_tree() {
+    local root="$1"
+    mkdir -p "$root/images" "$root/initdb"
+    cp -a "$BUNDLE_DIR"/. "$root/"
+    # Strip any builder-local secrets that install.sh may have written
+    # into bundle/ when run in place (e.g. by a developer testing
+    # locally): a live .env with a real Postgres password, and a
+    # generated TLS private key/cert under nginx/certs/. This must run
+    # before write_provenance/write_manifest in package_bundle --
+    # install.sh's configure_env()/generate_tls_cert() are deliberately
+    # idempotent and treat an existing .env or cert/key pair as "already
+    # configured", so if these ever leaked into a shipped bundle every
+    # site installing from it would silently adopt the same DB
+    # password and the same TLS private key. Neither path is
+    # guaranteed to exist (a fresh checkout that never had install.sh
+    # run in it has neither) so this must not be treated as failure.
+    rm -rf "$root/.env" "$root/nginx/certs"
+
+    generate_schema "$root/initdb"
+    substitute_compose_images "$root/docker-compose.yml"
+}
+
 package_bundle() {
     local version="$1" work_dir root date_stamp tarball_name
     date_stamp="$(date -u +%Y%m%d)"
@@ -238,25 +266,8 @@ package_bundle() {
         trap 'rm -rf "$work_dir"' EXIT
 
         root="$work_dir/guacamole-offline-${version}"
-        mkdir -p "$root/images" "$root/initdb"
-        cp -a "$BUNDLE_DIR"/. "$root/"
-        # Strip any builder-local secrets that install.sh may have written
-        # into bundle/ when run in place (e.g. by a developer testing
-        # locally): a live .env with a real Postgres password, and a
-        # generated TLS private key/cert under nginx/certs/. This must run
-        # before write_provenance/write_manifest below -- install.sh's
-        # configure_env()/generate_tls_cert() are deliberately idempotent
-        # and treat an existing .env or cert/key pair as "already
-        # configured", so if these ever leaked into a shipped bundle every
-        # site installing from it would silently adopt the same DB
-        # password and the same TLS private key. Neither path is
-        # guaranteed to exist (a fresh checkout that never had install.sh
-        # run in it has neither) so this must not be treated as failure.
-        rm -rf "$root/.env" "$root/nginx/certs"
-
-        generate_schema "$root/initdb"
+        stage_bundle_tree "$root"
         save_images "$root/images"
-        substitute_compose_images "$root/docker-compose.yml"
         assert_compose_images_saved "$root/docker-compose.yml" "$root/images"
         write_provenance "$root" "$version"
         # write_manifest runs last so it covers provenance.txt and the
@@ -279,10 +290,14 @@ package_bundle() {
 
 usage() {
     cat <<EOF
-Usage: $(basename "${BASH_SOURCE[0]}") [--selftest]
+Usage: $(basename "${BASH_SOURCE[0]}") [--selftest | --run-local]
 
 Builds the offline Guacamole bundle described by versions.env into dist/.
---selftest also unpacks the result and runs install.sh against it locally.
+--selftest   also unpacks the result and runs install.sh against it locally.
+--run-local  does NOT build: stages bundle/ into a temp dir, brings the stack
+             up with docker compose, checks the HTTPS login page and an API
+             login, then tears it down. A fast check of bundle/ edits before
+             paying for a full build.
 EOF
 }
 
@@ -325,18 +340,97 @@ run_selftest() {
         log_info "Selftest: running install.sh against the extracted bundle"
         ( cd "$bundle_root" && ./install.sh )
 
-        log_info "Selftest: checking the login page over HTTPS"
-        curl -fsSk "https://127.0.0.1/guacamole/" >/dev/null \
-            || die "Selftest failed: login page did not respond over HTTPS"
-
-        log_info "Selftest: logging in as guacadmin via the API to confirm the schema initialized"
-        local token
-        token="$(curl -fsSk -X POST "https://127.0.0.1/guacamole/api/tokens" \
-            -d "username=guacadmin&password=guacadmin" \
-            | grep -o '"authToken":"[^"]*"' | cut -d'"' -f4)"
-        [[ -n "$token" ]] || die "Selftest failed: could not obtain an authToken for guacadmin — schema may not have initialized"
+        verify_stack_responds Selftest
 
         log_info "Selftest passed: $tarball is a valid release"
+    )
+}
+
+# The verification bar shared by --selftest and --run-local: the login page
+# answers over HTTPS through nginx, and an API login as guacadmin succeeds,
+# which proves the Postgres schema initialized and the webapp can reach both
+# guacd and the database. $label prefixes the log/error lines so a failure
+# says which mode it came from.
+verify_stack_responds() {
+    local label="$1" token
+    log_info "${label}: checking the login page over HTTPS"
+    curl -fsSk "https://127.0.0.1/guacamole/" >/dev/null \
+        || die "${label} failed: login page did not respond over HTTPS"
+
+    log_info "${label}: logging in as guacadmin via the API to confirm the schema initialized"
+    token="$(curl -fsSk -X POST "https://127.0.0.1/guacamole/api/tokens" \
+        -d "username=guacadmin&password=guacadmin" \
+        | grep -o '"authToken":"[^"]*"' | cut -d'"' -f4)"
+    [[ -n "$token" ]] || die "${label} failed: could not obtain an authToken for guacadmin — schema may not have initialized"
+}
+
+# --run-local stands the staged tree up without going through install.sh
+# (which needs image tars to load, and would write .env/certs into whatever
+# directory it runs from). These two helpers therefore mirror install.sh's
+# configure_env() and generate_tls_cert() minus their "already exists"
+# branches -- the staged tree is always fresh. Keep the openssl invocations
+# and the env.template placeholder in step with install.sh, the same way
+# compose_image_refs() is kept in step across the two scripts.
+write_local_env() {
+    local root="$1" pg_password
+    [[ -f "$root/env.template" ]] || die "env.template not found in ${root} — bundle/ is missing it."
+    pg_password="$(openssl rand -base64 24)" \
+        || die "Failed to generate a random Postgres password with 'openssl rand' — check that openssl works on this host."
+    ( umask 077 && sed "s|__POSTGRES_PASSWORD__|${pg_password}|" "$root/env.template" > "$root/.env" ) \
+        || die "Failed to write ${root}/.env from env.template"
+}
+
+write_local_tls_cert() {
+    local root="$1" cert_dir="$1/nginx/certs" openssl_err
+    mkdir -p "$cert_dir"
+    openssl_err="$(openssl req -x509 -nodes -newkey rsa:2048 \
+        -keyout "$cert_dir/privkey.pem" -out "$cert_dir/fullchain.pem" -days 1 \
+        -subj "/CN=guacamole.local" 2>&1 >/dev/null)" \
+        || die "Failed to generate a throwaway TLS certificate in ${cert_dir}: ${openssl_err}"
+    chmod 600 "$cert_dir/privkey.pem"
+}
+
+# Bring the working-tree bundle/ up locally and prove it is healthy, without
+# saving images, producing a tarball, or touching bundle/ or dist/. This is
+# the fast pre-package check: it stages exactly the tree package_bundle
+# would (stage_bundle_tree), so a compose/nginx/env/schema problem shows up
+# here in the time it takes the stack to boot, not after a full
+# save/tar/extract/load cycle. The tree lives in a temp dir so the generated
+# .env and TLS key never land in the repo. install.sh itself is not
+# exercised here -- that remains --selftest's job.
+run_local() {
+    # Subshell + EXIT trap for the same reasons documented on run_selftest:
+    # cleanup must fire on `die`/errexit, not only on a normal return. The
+    # trap tears the stack down BEFORE removing the tree (compose needs the
+    # file to know what to stop), and swallows its own errors so a failure
+    # that happened before `up` ever ran is not masked by a noisy `down`.
+    (
+        local work_dir local_root
+        work_dir="$(mktemp -d "${TMPDIR:-/tmp}/guac-runlocal.XXXXXX")"
+        local_root="$work_dir/guacamole-offline-${GUACAMOLE_TAG}"
+        trap '( cd "$local_root" 2>/dev/null && docker compose --env-file .env down -v ) >/dev/null 2>&1 || true; rm -rf "$work_dir"' EXIT
+
+        log_info "Run-local: staging bundle/ into $local_root"
+        stage_bundle_tree "$local_root"
+        write_local_env "$local_root"
+        write_local_tls_cert "$local_root"
+
+        log_info "Run-local: bringing the stack up and waiting for every service to report healthy"
+        # `up --wait` blocks until every service with a healthcheck is
+        # healthy (all four here) and fails non-zero on timeout, so no
+        # separate polling loop is needed. Compose v2 only, as everywhere
+        # else in this repo.
+        if ! ( cd "$local_root" && docker compose --env-file .env up -d --wait --wait-timeout 180 ); then
+            # The tree is removed by the EXIT trap, so surface the diagnostics
+            # now rather than pointing at a path that will not exist.
+            log_error "Run-local: the stack did not come up healthy. Service status and recent logs:"
+            ( cd "$local_root" && docker compose --env-file .env ps && docker compose --env-file .env logs --tail=50 ) >&2 || true
+            die "Run-local failed: the stack did not come up healthy from bundle/ — see the compose output above. Ports 80/443 must be free on this host."
+        fi
+
+        verify_stack_responds Run-local
+
+        log_info "Run-local passed: bundle/ brings up a healthy stack"
     )
 }
 
@@ -372,19 +466,32 @@ mark_unverified_on_exit() {
 }
 
 main() {
-    local selftest=0 version
+    local selftest=0 run_local_only=0 version
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --selftest) selftest=1 ;;
+            --run-local) run_local_only=1 ;;
             -h|--help) usage; exit 0 ;;
             *) die "Unknown argument: $1 (see --help)" ;;
         esac
         shift
     done
+    if [[ "$selftest" -eq 1 && "$run_local_only" -eq 1 ]]; then
+        die "--run-local and --selftest are mutually exclusive: --run-local never builds a tarball, so there is nothing for --selftest to test."
+    fi
 
     load_versions "$VERSIONS_FILE"
     version="$GUACAMOLE_TAG"
+    # Pulling is deliberately shared with the build path: a digest pull that
+    # is already local is a fast no-op, and it is the step that guarantees
+    # the plain repo:tag the compose file names actually exists.
     pull_images
+
+    if [[ "$run_local_only" -eq 1 ]]; then
+        run_local
+        return 0
+    fi
+
     local tarball
     tarball="$(package_bundle "$version")"
 
