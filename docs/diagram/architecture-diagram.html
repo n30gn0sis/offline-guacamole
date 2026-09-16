@@ -1,0 +1,640 @@
+<title>Offline Guacamole Bundle</title>
+<style>
+  :root {
+    --bg: #eef1f4;
+    --surface: #ffffff;
+    --surface-2: #e3e9ee;
+    --ink: #131c26;
+    --ink-soft: #4c5a68;
+    --ink-faint: #7c8b99;
+    --border: #ccd5dc;
+    --accent: #b8721f;
+    --accent-soft: #f2e2cb;
+    --verify: #1c7c6e;
+    --verify-soft: #dcefec;
+    --hazard: #a6382c;
+    --hazard-soft: #f4ded9;
+    --font-sans: 'IBM Plex Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --font-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0e1620;
+      --surface: #141d29;
+      --surface-2: #1a2431;
+      --ink: #e7edf3;
+      --ink-soft: #9caebe;
+      --ink-faint: #6c7c8c;
+      --border: #2a3b4c;
+      --accent: #dd9c4d;
+      --accent-soft: #3a2c17;
+      --verify: #48b3a1;
+      --verify-soft: #143028;
+      --hazard: #e17a68;
+      --hazard-soft: #3a1f1a;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0e1620;
+    --surface: #141d29;
+    --surface-2: #1a2431;
+    --ink: #e7edf3;
+    --ink-soft: #9caebe;
+    --ink-faint: #6c7c8c;
+    --border: #2a3b4c;
+    --accent: #dd9c4d;
+    --accent-soft: #3a2c17;
+    --verify: #48b3a1;
+    --verify-soft: #143028;
+    --hazard: #e17a68;
+    --hazard-soft: #3a1f1a;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    margin: 0;
+    padding-inline: 20px;
+    padding-block: 48px 80px;
+  }
+  main {
+    max-width: 920px;
+    margin-inline: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 64px;
+  }
+  a { color: var(--accent); }
+
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin: 0 0 10px;
+  }
+  h1 {
+    font-size: clamp(30px, 5vw, 42px);
+    font-weight: 700;
+    line-height: 1.08;
+    letter-spacing: -0.01em;
+    margin: 0 0 14px;
+    text-wrap: balance;
+  }
+  h2 {
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.005em;
+    margin: 0 0 6px;
+    text-wrap: balance;
+  }
+  .dek {
+    font-size: 16.5px;
+    line-height: 1.6;
+    color: var(--ink-soft);
+    max-width: 62ch;
+    margin: 0;
+  }
+  .section-head { margin-bottom: 28px; }
+  .section-num {
+    font-family: var(--font-mono);
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  /* ---------- header stats ---------- */
+  .stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 24px;
+  }
+  .stat {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 108px;
+  }
+  .stat .n {
+    font-family: var(--font-mono);
+    font-size: 19px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat .l {
+    font-size: 11.5px;
+    color: var(--ink-faint);
+    letter-spacing: 0.01em;
+  }
+
+  /* ---------- figures ---------- */
+  figure {
+    margin: 0;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 26px 26px 20px;
+  }
+  figure.bare {
+    background: none;
+    border: none;
+    padding: 0;
+  }
+  svg { display: block; width: 100%; height: auto; overflow: visible; }
+  figcaption {
+    font-size: 13.5px;
+    line-height: 1.55;
+    color: var(--ink-soft);
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+  }
+  figcaption code, .dek code, p code {
+    font-family: var(--font-mono);
+    font-size: 0.92em;
+    background: var(--surface-2);
+    padding: 0.1em 0.4em;
+    border-radius: 4px;
+  }
+
+  svg text { fill: currentColor; font-family: var(--font-mono); }
+  .node-title { font-family: var(--font-sans); font-weight: 600; }
+  .box { fill: var(--surface-2); stroke: var(--border); stroke-width: 1.3; }
+  .box-accent { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.5; }
+  .box-verify { fill: var(--verify-soft); stroke: var(--verify); stroke-width: 1.5; }
+  .box-hazard { fill: var(--hazard-soft); stroke: var(--hazard); stroke-width: 1.5; }
+  .line { stroke: var(--ink-faint); stroke-width: 1.4; fill: none; }
+  .line-accent { stroke: var(--accent); stroke-width: 2; fill: none; }
+  .line-verify { stroke: var(--verify); stroke-width: 1.6; fill: none; }
+  .dash { stroke-dasharray: 5 5; }
+  .sub { fill: var(--ink-soft); font-size: 10.6px; }
+  .lbl { fill: var(--ink-faint); font-size: 10.5px; }
+  .tag {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.03em;
+  }
+
+  /* ---------- repo tree panels ---------- */
+  .tree-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+  .tree-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 18px 16px;
+  }
+  .tree-panel h3 {
+    font-size: 13px;
+    font-weight: 600;
+    margin: 0 0 3px;
+  }
+  .tree-panel .th-sub {
+    font-size: 11.5px;
+    color: var(--ink-faint);
+    margin: 0 0 14px;
+  }
+  .tree-panel ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    line-height: 1.95;
+  }
+  .tree-panel li { color: var(--ink-soft); white-space: nowrap; overflow-x: auto; }
+  .tree-panel li .fname { color: var(--ink); }
+  .tree-panel li.dir .fname { color: var(--accent); }
+  .tree-panel .indent { padding-left: 1.1em; }
+  .tree-panel .indent2 { padding-left: 2.2em; }
+  .tree-panel .note {
+    font-family: var(--font-sans);
+    font-size: 11px;
+    color: var(--ink-faint);
+    white-space: normal;
+    display: block;
+    padding-left: 1.1em;
+    line-height: 1.5;
+    margin-top: -2px;
+  }
+  .badge {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.02em;
+    padding: 1px 7px;
+    border-radius: 20px;
+    margin-left: 8px;
+    vertical-align: 1px;
+  }
+  .badge-verify { background: var(--verify-soft); color: var(--verify); }
+  .badge-accent { background: var(--accent-soft); color: var(--accent); }
+
+  footer {
+    font-size: 13px;
+    color: var(--ink-faint);
+    border-top: 1px solid var(--border);
+    padding-top: 20px;
+    line-height: 1.6;
+  }
+  footer code { font-family: var(--font-mono); background: var(--surface-2); padding: 0.05em 0.35em; border-radius: 4px; }
+
+  @media (max-width: 720px) {
+    .tree-grid { grid-template-columns: 1fr; }
+    figure { padding: 18px 16px 16px; }
+  }
+</style>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<main>
+
+  <!-- ============ HEADER ============ -->
+  <header>
+    <p class="eyebrow">Repository map — offline-guacamole</p>
+    <h1>One tarball, built connected, run disconnected.</h1>
+    <p class="dek">
+      <code>build.sh</code> and <code>bundle/install.sh</code> are two
+      independent scripts on either side of a network boundary. Nothing
+      the target host does depends on an internet connection — every
+      image, every secret, every certificate is generated or loaded from
+      inside the bundle itself.
+    </p>
+    <div class="stats">
+      <div class="stat"><span class="n">2</span><span class="l">scripts, 693 lines</span></div>
+      <div class="stat"><span class="n">4</span><span class="l">containers, 1 published</span></div>
+      <div class="stat"><span class="n">71</span><span class="l">bats tests</span></div>
+      <div class="stat"><span class="n">0</span><span class="l">shellcheck warnings</span></div>
+      <div class="stat"><span class="n">0</span><span class="l">bytes over the network at install</span></div>
+    </div>
+  </header>
+
+  <!-- ============ 1. BUILD PIPELINE ============ -->
+  <section>
+    <div class="section-head">
+      <p class="eyebrow"><span class="section-num">01</span> — connected side</p>
+      <h2><code style="font-family:inherit;background:none;padding:0;">build.sh</code> — pin, pull, prove, package</h2>
+    </div>
+    <figure>
+      <svg viewBox="0 0 920 280" role="img" aria-label="Build pipeline: versions.env is read, images are pulled by digest and re-tagged, saved and verified, baked into the compose file and verified again, then provenance and a manifest are written before everything is packaged into a tarball. An optional --selftest branch installs the result and checks it before release.">
+        <defs>
+          <marker id="a1" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="var(--ink-faint)"></path>
+          </marker>
+          <marker id="a1d" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"></path>
+          </marker>
+        </defs>
+
+        <!-- nodes -->
+        <g>
+          <rect class="box" x="10" y="60" width="150" height="70" rx="10"></rect>
+          <text x="85" y="90" text-anchor="middle" class="node-title" font-size="13">versions.env</text>
+          <text x="85" y="107" text-anchor="middle" class="sub">tag + sha256</text>
+          <text x="85" y="119" text-anchor="middle" class="sub">digest, per image</text>
+        </g>
+
+        <line class="line" x1="160" y1="95" x2="196" y2="95" marker-end="url(#a1)"></line>
+
+        <g>
+          <rect class="box" x="198" y="60" width="150" height="70" rx="10"></rect>
+          <text x="273" y="90" text-anchor="middle" class="node-title" font-size="13">pull + tag</text>
+          <text x="273" y="107" text-anchor="middle" class="sub">pull repo:tag@digest</text>
+          <text x="273" y="119" text-anchor="middle" class="sub">tag → repo:tag</text>
+        </g>
+
+        <line class="line" x1="348" y1="95" x2="384" y2="95" marker-end="url(#a1)"></line>
+
+        <g>
+          <rect class="box" x="386" y="60" width="150" height="70" rx="10"></rect>
+          <text x="461" y="90" text-anchor="middle" class="node-title" font-size="13">save + verify</text>
+          <text x="461" y="107" text-anchor="middle" class="sub">docker save repo:tag</text>
+          <text x="461" y="119" text-anchor="middle" class="sub">assert RepoTags set</text>
+        </g>
+
+        <line class="line" x1="536" y1="95" x2="572" y2="95" marker-end="url(#a1)"></line>
+
+        <g>
+          <rect class="box" x="574" y="60" width="150" height="70" rx="10"></rect>
+          <text x="649" y="90" text-anchor="middle" class="node-title" font-size="13">bake + verify</text>
+          <text x="649" y="107" text-anchor="middle" class="sub">substitute refs into</text>
+          <text x="649" y="119" text-anchor="middle" class="sub">compose, cross-check</text>
+        </g>
+
+        <line class="line" x1="724" y1="95" x2="760" y2="95" marker-end="url(#a1)"></line>
+
+        <g>
+          <rect class="box-accent" x="762" y="60" width="150" height="70" rx="10"></rect>
+          <text x="837" y="86" text-anchor="middle" class="node-title" font-size="13">package</text>
+          <text x="837" y="103" text-anchor="middle" class="sub">provenance +</text>
+          <text x="837" y="115" text-anchor="middle" class="sub">manifest.sha256</text>
+        </g>
+
+        <!-- tarball output, dropping down -->
+        <line class="line-accent" x1="837" y1="130" x2="837" y2="168" marker-end="url(#a1d)"></line>
+        <rect class="box-accent" x="717" y="170" width="240" height="34" rx="8"></rect>
+        <text x="837" y="192" text-anchor="middle" class="tag" font-size="11.5">guacamole-offline-&lt;ver&gt;-&lt;date&gt;.tar.gz</text>
+
+        <!-- optional selftest branch -->
+        <line class="line dash" x1="837" y1="130" x2="837" y2="150" ></line>
+        <line class="line dash" x1="837" y1="150" x2="230" y2="150"></line>
+        <line class="line dash" x1="230" y1="150" x2="230" y2="222" marker-end="url(#a1)"></line>
+        <rect class="box" x="10" y="224" width="440" height="46" rx="9" stroke-dasharray="4 4"></rect>
+        <text x="30" y="243" class="tag" font-size="11">optional: --selftest</text>
+        <text x="30" y="260" class="sub">extract → install.sh → wait_healthy → HTTPS + guacadmin API login</text>
+
+        <text x="460" y="245" class="lbl" font-size="11">failure renames the</text>
+        <text x="460" y="260" class="lbl" font-size="11">tarball to <tspan fill="var(--hazard)">.FAILED</tspan> (EXIT trap in main)</text>
+      </svg>
+      <figcaption>
+        Every image is pulled <strong>by digest</strong>, not tag — a
+        re-pushed upstream tag can't silently change what ships. The two
+        cross-checks (<code>assert_tar_repotags</code>,
+        <code>assert_compose_images_saved</code>) exist because a saved
+        image and a compose file can each independently drift from what
+        was actually pulled; both are verified against the artifact's own
+        bytes, not daemon state.
+      </figcaption>
+    </figure>
+  </section>
+
+  <!-- ============ 2. THE AIRGAP ============ -->
+  <section>
+    <div class="section-head">
+      <p class="eyebrow"><span class="section-num">02</span> — the boundary</p>
+      <h2>What actually crosses the gap</h2>
+    </div>
+    <figure>
+      <svg viewBox="0 0 920 210" role="img" aria-label="A connected build host and a disconnected target host are separated by an airgap. Only the tarball crosses it, carried by removable media or a one-way transfer, never a network link. The target verifies the tarball against manifest.sha256 before trusting any of it.">
+        <!-- zone labels + icons -->
+        <text x="190" y="28" text-anchor="middle" class="node-title" font-size="13">CONNECTED — build host</text>
+        <circle cx="36" cy="46" r="5" class="line-verify" fill="none"></circle>
+        <path d="M28,46 a8,8 0 0 1 16,0" class="line-verify"></path>
+        <path d="M22,46 a14,14 0 0 1 28,0" class="line-verify"></path>
+        <text x="52" y="50" class="lbl" fill="var(--verify)">network reachable</text>
+
+        <text x="730" y="28" text-anchor="middle" class="node-title" font-size="13" fill="var(--hazard)">DISCONNECTED — target host</text>
+        <line x1="860" y1="40" x2="884" y2="52" class="line" stroke="var(--hazard)" stroke-width="2"></line>
+        <rect x="862" y="47" width="4" height="10" fill="var(--hazard)"></rect>
+        <rect x="870" y="43" width="4" height="14" fill="var(--hazard)"></rect>
+        <rect x="878" y="39" width="4" height="18" fill="var(--hazard)"></rect>
+        <text x="700" y="50" class="lbl" fill="var(--hazard)">no network, ever</text>
+
+        <!-- baseline with gap -->
+        <line x1="20" y1="170" x2="360" y2="170" class="line"></line>
+        <line x1="560" y1="170" x2="900" y2="170" class="line"></line>
+        <g stroke="var(--hazard)" stroke-width="2" opacity="0.55">
+          <line x1="370" y1="180" x2="382" y2="160"></line>
+          <line x1="392" y1="180" x2="404" y2="160"></line>
+          <line x1="414" y1="180" x2="426" y2="160"></line>
+          <line x1="436" y1="180" x2="448" y2="160"></line>
+          <line x1="458" y1="180" x2="470" y2="160"></line>
+          <line x1="480" y1="180" x2="492" y2="160"></line>
+          <line x1="502" y1="180" x2="514" y2="160"></line>
+          <line x1="524" y1="180" x2="536" y2="160"></line>
+          <line x1="546" y1="180" x2="550" y2="172"></line>
+        </g>
+
+        <!-- crossing arrows -->
+        <line class="line-accent" x1="300" y1="105" x2="378" y2="105" marker-end="url(#a1d)"></line>
+        <line class="line-accent" x1="542" y1="105" x2="620" y2="105" marker-end="url(#a1d)"></line>
+
+        <!-- the tarball -->
+        <rect class="box-accent" x="380" y="70" width="160" height="70" rx="10"></rect>
+        <text x="460" y="98" text-anchor="middle" class="node-title" font-size="12.5">one tarball</text>
+        <text x="460" y="114" text-anchor="middle" class="sub">removable media /</text>
+        <text x="460" y="126" text-anchor="middle" class="sub">one-way transfer</text>
+
+        <text x="460" y="155" text-anchor="middle" class="tag" font-size="10.5" fill="var(--verify)">verified against manifest.sha256 on arrival</text>
+      </svg>
+      <figcaption>
+        <code>install.sh</code> never assumes the transfer was clean:
+        before it loads a single image, <code>verify_manifest</code>
+        checksums every file <em>and</em> rejects any file present that
+        isn't listed — a corrupted transfer and a tampered one fail the
+        same way, loudly, before anything touches the Docker daemon.
+      </figcaption>
+    </figure>
+  </section>
+
+  <!-- ============ 3. INSTALL PIPELINE ============ -->
+  <section>
+    <div class="section-head">
+      <p class="eyebrow"><span class="section-num">03</span> — disconnected side</p>
+      <h2><code style="font-family:inherit;background:none;padding:0;">install.sh</code> — verify, load, stand up, wait</h2>
+    </div>
+    <figure>
+      <svg viewBox="0 0 920 200" role="img" aria-label="Install pipeline: preflight checks, verify the bundle, load and verify images, configure secrets and TLS, bring the compose stack up with pull policy never, then wait for health and report.">
+        <defs>
+          <marker id="a2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="var(--ink-faint)"></path>
+          </marker>
+        </defs>
+
+        <g>
+          <rect class="box" x="16" y="50" width="128" height="72" rx="9"></rect>
+          <text x="80" y="78" text-anchor="middle" class="node-title" font-size="12">preflight</text>
+          <text x="80" y="95" text-anchor="middle" class="sub" font-size="10">docker · compose</text>
+          <text x="80" y="107" text-anchor="middle" class="sub" font-size="10">openssl · ports</text>
+        </g>
+        <line class="line" x1="144" y1="86" x2="166" y2="86" marker-end="url(#a2)"></line>
+
+        <g>
+          <rect class="box-verify" x="168" y="50" width="128" height="72" rx="9"></rect>
+          <text x="232" y="78" text-anchor="middle" class="node-title" font-size="12">verify bundle</text>
+          <text x="232" y="95" text-anchor="middle" class="sub" font-size="10">checksum every file</text>
+          <text x="232" y="107" text-anchor="middle" class="sub" font-size="10">reject unlisted ones</text>
+        </g>
+        <line class="line" x1="296" y1="86" x2="318" y2="86" marker-end="url(#a2)"></line>
+
+        <g>
+          <rect class="box" x="320" y="50" width="128" height="72" rx="9"></rect>
+          <text x="384" y="78" text-anchor="middle" class="node-title" font-size="12">load images</text>
+          <text x="384" y="95" text-anchor="middle" class="sub" font-size="10">docker load ×4</text>
+          <text x="384" y="107" text-anchor="middle" class="sub" font-size="10">confirm each resolves</text>
+        </g>
+        <line class="line" x1="448" y1="86" x2="470" y2="86" marker-end="url(#a2)"></line>
+
+        <g>
+          <rect class="box" x="472" y="50" width="128" height="72" rx="9"></rect>
+          <text x="536" y="78" text-anchor="middle" class="node-title" font-size="12">secrets + TLS</text>
+          <text x="536" y="95" text-anchor="middle" class="sub" font-size="10">random DB password</text>
+          <text x="536" y="107" text-anchor="middle" class="sub" font-size="10">self-signed cert</text>
+        </g>
+        <line class="line" x1="600" y1="86" x2="622" y2="86" marker-end="url(#a2)"></line>
+
+        <g>
+          <rect class="box-verify" x="624" y="50" width="128" height="72" rx="9"></rect>
+          <text x="688" y="78" text-anchor="middle" class="node-title" font-size="12">compose up</text>
+          <text x="688" y="95" text-anchor="middle" class="sub" font-size="10">pull_policy: never</text>
+          <text x="688" y="107" text-anchor="middle" class="sub" font-size="10">no registry, ever</text>
+        </g>
+        <line class="line" x1="752" y1="86" x2="774" y2="86" marker-end="url(#a2)"></line>
+
+        <g>
+          <rect class="box" x="776" y="50" width="128" height="72" rx="9"></rect>
+          <text x="840" y="78" text-anchor="middle" class="node-title" font-size="12">wait + report</text>
+          <text x="840" y="95" text-anchor="middle" class="sub" font-size="10">poll healthchecks</text>
+          <text x="840" y="107" text-anchor="middle" class="sub" font-size="10">guacadmin warning</text>
+        </g>
+
+        <text x="460" y="150" text-anchor="middle" class="lbl" font-size="11">idempotent throughout — a re-run never overwrites an existing <tspan fill="var(--ink)">.env</tspan> or TLS cert/key pair</text>
+        <text x="460" y="168" text-anchor="middle" class="lbl" font-size="11">every failure names the specific file, port, or image and how to fix it — no raw tool output reaches the operator</text>
+      </svg>
+      <figcaption>
+        The two teal steps are the ones enforcing the offline guarantee
+        end to end: <code>verify bundle</code> is the only thing standing
+        between a corrupted or tampered tarball and the Docker daemon;
+        <code>pull_policy: never</code> on every service means Compose
+        physically cannot fall back to a registry even if an operator's
+        host happens to have a connection.
+      </figcaption>
+    </figure>
+  </section>
+
+  <!-- ============ 4. RUNTIME TOPOLOGY ============ -->
+  <section>
+    <div class="section-head">
+      <p class="eyebrow"><span class="section-num">04</span> — once it's up</p>
+      <h2>Four containers, one door in</h2>
+    </div>
+    <figure>
+      <svg viewBox="0 0 760 470" role="img" aria-label="Runtime topology: nginx is the only container publishing host ports and terminates TLS, proxying to the internal-only guacamole webapp, which reads users and connections from postgres and tunnels sessions through guacd to external RDP, VNC and SSH targets. All four containers share a bridge network called guac-net and every service sets pull policy never.">
+        <defs>
+          <marker id="a3" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="var(--ink-faint)"></path>
+          </marker>
+        </defs>
+
+        <!-- operator -->
+        <rect class="box" x="300" y="14" width="160" height="34" rx="8"></rect>
+        <text x="380" y="35" text-anchor="middle" class="tag" font-size="11">operator browser</text>
+        <line class="line" x1="380" y1="48" x2="380" y2="98" marker-end="url(#a3)"></line>
+        <text x="392" y="78" class="lbl" font-size="10.5">443 https (+80 → 443)</text>
+
+        <!-- network boundary -->
+        <rect x="50" y="100" width="660" height="345" rx="16" fill="none" stroke="var(--border)" stroke-width="1.4" stroke-dasharray="5 5"></rect>
+        <text x="66" y="125" class="tag" font-size="11" fill="var(--ink-faint)">docker network — guac-net (bridge)</text>
+
+        <!-- nginx -->
+        <rect class="box-accent" x="300" y="100" width="160" height="66" rx="10"></rect>
+        <text x="380" y="126" text-anchor="middle" class="node-title" font-size="12.5">nginx</text>
+        <text x="380" y="143" text-anchor="middle" class="sub">TLS termination</text>
+        <text x="380" y="155" text-anchor="middle" class="tag" font-size="9.5" fill="var(--accent)">published: 80, 443</text>
+
+        <line class="line" x1="380" y1="166" x2="380" y2="220" marker-end="url(#a3)"></line>
+        <text x="392" y="197" class="lbl" font-size="10.5">depends_on: service_healthy</text>
+
+        <!-- guacamole -->
+        <rect class="box" x="300" y="222" width="160" height="66" rx="10"></rect>
+        <text x="380" y="248" text-anchor="middle" class="node-title" font-size="12.5">guacamole</text>
+        <text x="380" y="265" text-anchor="middle" class="sub">tomcat webapp :8080</text>
+        <text x="380" y="277" text-anchor="middle" class="tag" font-size="9.5" fill="var(--ink-faint)">internal only</text>
+
+        <!-- postgres -->
+        <line class="line" x1="300" y1="270" x2="230" y2="330" marker-end="url(#a3)"></line>
+        <rect class="box" x="80" y="332" width="160" height="66" rx="10"></rect>
+        <text x="160" y="358" text-anchor="middle" class="node-title" font-size="12.5">postgres</text>
+        <text x="160" y="375" text-anchor="middle" class="sub">users · connections</text>
+        <text x="160" y="387" text-anchor="middle" class="tag" font-size="9.5" fill="var(--ink-faint)">internal only</text>
+        <text x="208" y="305" class="lbl" font-size="10">JDBC: auth + perms</text>
+
+        <rect class="box" x="80" y="410" width="160" height="30" rx="7" stroke-dasharray="3 3"></rect>
+        <text x="160" y="429" text-anchor="middle" class="tag" font-size="10">volume: guac-db</text>
+        <line class="line dash" x1="160" y1="398" x2="160" y2="410"></line>
+
+        <!-- guacd -->
+        <line class="line" x1="460" y1="270" x2="530" y2="330" marker-end="url(#a3)"></line>
+        <rect class="box" x="520" y="332" width="160" height="66" rx="10"></rect>
+        <text x="600" y="358" text-anchor="middle" class="node-title" font-size="12.5">guacd</text>
+        <text x="600" y="375" text-anchor="middle" class="sub">proxy daemon</text>
+        <text x="600" y="387" text-anchor="middle" class="tag" font-size="9.5" fill="var(--ink-faint)">internal only</text>
+        <text x="470" y="305" class="lbl" font-size="10">tunnels sessions</text>
+
+        <line class="line dash" x1="680" y1="365" x2="716" y2="365" marker-end="url(#a3)"></line>
+        <text x="574" y="418" text-anchor="middle" class="lbl" font-size="10.5">RDP / VNC / SSH targets — elsewhere on the network, outside this stack</text>
+
+        <text x="66" y="435" class="tag" font-size="10.5" fill="var(--verify)">every service: pull_policy: never</text>
+      </svg>
+      <figcaption>
+        <code>nginx</code> is the only container with a published port —
+        everything else is reachable exclusively over <code>guac-net</code>.
+        Data flow at runtime: browser → nginx (TLS) → guacamole → guacd →
+        the target RDP/VNC/SSH host, with guacamole reading who's allowed
+        to connect from Postgres.
+      </figcaption>
+    </figure>
+  </section>
+
+  <!-- ============ 5. REPO LAYOUT ============ -->
+  <section>
+    <div class="section-head">
+      <p class="eyebrow"><span class="section-num">05</span> — where it lives</p>
+      <h2>Three places a file can be</h2>
+    </div>
+    <div class="tree-grid">
+
+      <div class="tree-panel">
+        <h3>Repo root — build side</h3>
+        <p class="th-sub">runs once, on a connected machine</p>
+        <ul>
+          <li><span class="fname">build.sh</span></li>
+          <li><span class="fname">versions.env</span></li>
+          <li><span class="fname">README.md</span></li>
+          <li class="dir"><span class="fname">docs/</span></li>
+          <li class="indent">superpowers/specs, plans</li>
+          <li class="dir"><span class="fname">tests/</span></li>
+          <li class="indent">21 .bats files</li>
+        </ul>
+      </div>
+
+      <div class="tree-panel">
+        <h3>bundle/ — static<span class="badge badge-accent">copied verbatim</span></h3>
+        <p class="th-sub">the fixed parts of every release</p>
+        <ul>
+          <li><span class="fname">install.sh</span></li>
+          <li><span class="fname">docker-compose.yml</span></li>
+          <li class="note">image: lines are placeholders — substituted at build time</li>
+          <li><span class="fname">env.template</span></li>
+          <li class="dir"><span class="fname">nginx/</span></li>
+          <li class="indent">nginx.conf</li>
+          <li><span class="fname">README.md</span></li>
+        </ul>
+      </div>
+
+      <div class="tree-panel">
+        <h3>Inside the tarball<span class="badge badge-verify">generated</span></h3>
+        <p class="th-sub">written by package_bundle, per release</p>
+        <ul>
+          <li class="dir"><span class="fname">images/</span></li>
+          <li class="indent">guacamole.tar</li>
+          <li class="indent">guacd.tar · postgres.tar · nginx.tar</li>
+          <li class="dir"><span class="fname">initdb/</span></li>
+          <li class="indent">001-schema.sql</li>
+          <li><span class="fname">provenance.txt</span></li>
+          <li><span class="fname">manifest.sha256</span></li>
+          <li class="note">+ everything from bundle/, with docker-compose.yml's refs resolved</li>
+        </ul>
+      </div>
+
+    </div>
+  </section>
+
+  <footer>
+    Repo: <code>offline-guacamole</code> · target: Docker Engine + Compose v2 on Ubuntu/Debian ·
+    auth: PostgreSQL-backed, no LDAP · currently on <code>master</code>, 71/71 tests
+    other than one config-validity check this build environment can't reach a registry to run.
+  </footer>
+
+</main>
