@@ -62,8 +62,8 @@ selftest.
 
 | # | Milestone | Outcome | Status | Plan |
 |---|---|---|---|---|
-| 1 | Run the working-tree bundle locally | A single command brings `bundle/` up, verifies healthy + HTTPS + API login, and tears down cleanly, without producing a tarball | in-progress | .claude/plans/local-prepackage-check.plan.md |
-| 2 | Fail the release early | A release build runs the local check before pulling/saving/packaging, and stops before the expensive steps if it fails | pending | — |
+| 1 | Run the working-tree bundle locally | A single command brings `bundle/` up, verifies healthy + HTTPS + API login, and tears down cleanly, without producing a tarball | complete | .claude/plans/local-prepackage-check.plan.md |
+| 2 | Fail the release early | A release build runs the local check before pulling/saving/packaging, and stops before the expensive steps if it fails | in-progress | .claude/plans/fail-release-early.plan.md |
 
 ## Open Questions
 - [ ] Image resolution: the working-tree `docker-compose.yml` carries

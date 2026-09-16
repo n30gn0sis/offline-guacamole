@@ -33,7 +33,10 @@ services:
     pull_policy: never
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/4822' || exit 1"]
+      # The guacd image is busybox-only: no bash, so no /dev/tcp. busybox nc
+      # is present and `-z` reports 0 for an open port, 1 for a closed one
+      # (verified against the pinned 1.6.0 image).
+      test: ["CMD-SHELL", "busybox nc -z 127.0.0.1 4822"]
       interval: 5s
       timeout: 5s
       retries: 20
