@@ -18,13 +18,14 @@ bats tests/build_images.bats                       # one file
 bats tests/build_versions.bats --filter "digest"   # tests whose name matches a regex
 shellcheck build.sh bundle/install.sh              # also enforced by tests/shellcheck.bats
 
-./build.sh              # real build: needs internet + Docker, writes dist/*.tar.gz
-./build.sh --selftest   # build, then unpack + install + HTTPS/API login check locally
-                        # (binds host ports 80/443; a failed selftest renames the
-                        #  tarball to *.tar.gz.FAILED)
-./build.sh --run-local  # no build: stage bundle/ into a temp dir, compose up --wait,
-                        # HTTPS/API login check, down -v. Fast check of bundle/ edits;
-                        # needs Docker + ports 80/443, never touches dist/ or bundle/
+./build.sh                 # real build: needs internet + Docker, writes dist/*.tar.gz.
+                           # Runs the local check (below) FIRST; --no-run-local skips it
+./build.sh --selftest      # build, then unpack + install + HTTPS/API login check locally
+                           # (binds host ports 80/443; a failed selftest renames the
+                           #  tarball to *.tar.gz.FAILED)
+./build.sh --run-local     # ONLY the local check: stage bundle/ into a temp dir,
+                           # compose up --wait, HTTPS/API login, down -v. ~20 s; needs
+                           # Docker + ports 80/443; never touches dist/ or bundle/
 ```
 
 `versions.env` in the repo has empty `*_DIGEST` values on purpose; a real build
@@ -44,7 +45,9 @@ Two halves, one contract between them:
   the staged tree up directly (bypassing `install.sh`) and runs the same
   `verify_stack_responds` probes `--selftest` uses. `write_local_env` /
   `write_local_tls_cert` intentionally mirror `install.sh`'s
-  `configure_env` / `generate_tls_cert` and must be kept in step.
+  `configure_env` / `generate_tls_cert`; `tests/build_install_parity.bats`
+  greps both scripts for the shared `openssl`/`sed`/`awk` fragments and fails
+  if either side changes alone.
 - **Install side** (`bundle/` — everything here ships verbatim in the tarball):
   preflight → verify manifest + refuse unlisted files → `docker load` + confirm
   every compose image resolves → generate `.env` and self-signed TLS (idempotent)
@@ -101,6 +104,8 @@ codes, stdout, or side-effect files (e.g. writing a tar with a `manifest.json`
 for `docker save`). `stub_curl` / `$CURL_LOG` / `$CURL_STUB_SCRIPT` are the
 same shape for `curl`. One test (`bundle_config.bats`, `nginx -t`) needs a
 real Docker daemon and the nginx image; it fails, not skips, without them.
+Drivers that call `main` (`build_selftest.bats`, `build_run_local.bats`) must
+stub `run_local` too, since a default build now calls it.
 Test files are named `build_*.bats` / `install_*.bats` by the function group
 they cover. Always call `unstub_docker` in `teardown`.
 

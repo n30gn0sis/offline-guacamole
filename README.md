@@ -13,13 +13,17 @@ deployment bundle, and install it on a Docker host with no internet access.
    ```
    and copy the `sha256:...` digest into the matching `*_DIGEST` line.
 2. Run `./build.sh --selftest`. This pulls the pinned images by digest,
-   re-tags each one under its plain `repo:tag`, generates the Postgres schema
-   from the real webapp image, substitutes the concrete image references into
-   the bundle's `docker-compose.yml`, and packages everything into
-   `dist/guacamole-offline-<version>-<date>.tar.gz`. It then unpacks that
-   tarball and proves it installs and comes up healthy. A tarball that fails
-   the selftest is renamed to `...tar.gz.FAILED` so it can never be mistaken
-   for a valid release — only a plain `.tar.gz` in `dist/` is shippable.
+   re-tags each one under its plain `repo:tag`, then brings the stack up
+   locally from `bundle/` as a fast sanity check (about 20 seconds; needs
+   ports 80/443 free — `--no-run-local` skips it) so a broken bundle fails
+   here rather than after the expensive steps. It then generates the Postgres
+   schema from the real webapp image, substitutes the concrete image
+   references into the bundle's `docker-compose.yml`, and packages everything
+   into `dist/guacamole-offline-<version>-<date>.tar.gz`. Finally it unpacks
+   that tarball and proves it installs and comes up healthy. A tarball that
+   fails the selftest is renamed to `...tar.gz.FAILED` so it can never be
+   mistaken for a valid release — only a plain `.tar.gz` in `dist/` is
+   shippable.
 3. Copy that tarball to the disconnected target by whatever transfer process
    your environment uses (removable media, a one-way diode, etc). Record the
    tarball's own SHA-256 in your transfer paperwork — see "Security notes" in
@@ -70,7 +74,8 @@ While editing anything under `bundle/` (compose file, nginx config,
 ./build.sh --run-local
 ```
 
-instead of a full build. It pulls the pinned images (a no-op once cached),
+instead of a full build (a plain `./build.sh` runs the same check first, then
+packages). It pulls the pinned images (a no-op once cached),
 stages `bundle/` into a temp directory exactly as packaging would, brings the
 stack up with `docker compose up --wait`, checks the HTTPS login page and an
 API login as `guacadmin`, then tears everything down including the database

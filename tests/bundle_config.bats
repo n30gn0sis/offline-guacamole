@@ -61,7 +61,11 @@ substituted_compose() {
     openssl req -x509 -nodes -newkey rsa:2048 \
         -keyout "$cert_dir/privkey.pem" -out "$cert_dir/fullchain.pem" \
         -days 1 -subj "/CN=test" >/dev/null 2>&1
+    # nginx -t resolves proxy_pass upstreams at config-check time, and the
+    # `guacamole` hostname only exists on the compose network. Give the
+    # lone container a host entry so the check exercises the config, not DNS.
     run docker run --rm \
+        --add-host guacamole:127.0.0.1 \
         -v "$(pwd)/bundle/nginx/nginx.conf:/etc/nginx/nginx.conf:ro" \
         -v "$cert_dir:/etc/nginx/certs:ro" \
         nginx:1.27-alpine nginx -t

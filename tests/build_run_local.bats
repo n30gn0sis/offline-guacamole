@@ -257,12 +257,53 @@ DRV
     [[ "$output" != *"MARK run_selftest"* ]]
 }
 
-@test "a plain build never runs the local check" {
+# Marker line numbers in $output, so ordering can be asserted.
+mark_line() { printf '%s\n' "$output" | grep -n "MARK $1" | head -1 | cut -d: -f1; }
+
+@test "a plain build runs the local check before packaging" {
     write_driver "$BATS_TEST_TMPDIR/drive.sh"
     run bash "$BATS_TEST_TMPDIR/drive.sh"
     [ "$status" -eq 0 ]
+    [[ "$output" == *"MARK run_local"* ]]
     [[ "$output" == *"MARK package_bundle"* ]]
+    [ "$(mark_line run_local)" -lt "$(mark_line package_bundle)" ]
+    [[ "$output" != *"MARK run_selftest"* ]]
+}
+
+@test "--no-run-local skips the local check and packages" {
+    write_driver "$BATS_TEST_TMPDIR/drive.sh"
+    run bash "$BATS_TEST_TMPDIR/drive.sh" --no-run-local
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Skipping the local pre-package check"* ]]
     [[ "$output" != *"MARK run_local"* ]]
+    [[ "$output" == *"MARK package_bundle"* ]]
+}
+
+@test "a failing local check aborts the build before packaging" {
+    write_driver "$BATS_TEST_TMPDIR/drive.sh"
+    # Override after the driver's own stub: die inside a subshell, as the
+    # real run_local does.
+    sed -i 's|^run_local()      .*|run_local()      { ( die "simulated local failure" ); }|' "$BATS_TEST_TMPDIR/drive.sh"
+    run bash "$BATS_TEST_TMPDIR/drive.sh"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"simulated local failure"* ]]
+    [[ "$output" != *"MARK package_bundle"* ]]
+}
+
+@test "--selftest runs the local check, then packages, then the selftest" {
+    write_driver "$BATS_TEST_TMPDIR/drive.sh"
+    run bash "$BATS_TEST_TMPDIR/drive.sh" --selftest
+    [ "$status" -eq 0 ]
+    [ "$(mark_line run_local)" -lt "$(mark_line package_bundle)" ]
+    [ "$(mark_line package_bundle)" -lt "$(mark_line run_selftest)" ]
+}
+
+@test "--run-local and --no-run-local together are refused before anything runs" {
+    write_driver "$BATS_TEST_TMPDIR/drive.sh"
+    run bash "$BATS_TEST_TMPDIR/drive.sh" --run-local --no-run-local
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"mutually exclusive"* ]]
+    [[ "$output" != *"MARK"* ]]
 }
 
 @test "--run-local and --selftest together are refused before anything runs" {
@@ -273,8 +314,9 @@ DRV
     [[ "$output" != *"MARK"* ]]
 }
 
-@test "--help documents --run-local" {
+@test "--help documents --run-local and --no-run-local" {
     run bash build.sh --help
     [ "$status" -eq 0 ]
     [[ "$output" == *"--run-local"* ]]
+    [[ "$output" == *"--no-run-local"* ]]
 }

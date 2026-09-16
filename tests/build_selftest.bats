@@ -18,6 +18,7 @@ set -euo pipefail
 source "$BATS_TEST_DIRNAME/../build.sh"
 load_versions()  { GUACAMOLE_TAG=1.6.0; }
 pull_images()    { :; }
+run_local()      { :; }
 package_bundle() { printf '%s\n' "$tarball"; }
 run_selftest() {
 ${selftest_body}

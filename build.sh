@@ -290,14 +290,17 @@ package_bundle() {
 
 usage() {
     cat <<EOF
-Usage: $(basename "${BASH_SOURCE[0]}") [--selftest | --run-local]
+Usage: $(basename "${BASH_SOURCE[0]}") [--selftest] [--run-local | --no-run-local]
 
 Builds the offline Guacamole bundle described by versions.env into dist/.
---selftest   also unpacks the result and runs install.sh against it locally.
---run-local  does NOT build: stages bundle/ into a temp dir, brings the stack
-             up with docker compose, checks the HTTPS login page and an API
-             login, then tears it down. A fast check of bundle/ edits before
-             paying for a full build.
+Before packaging, the stack is brought up locally from bundle/ as a fast
+sanity check (needs ports 80/443 free); a failure stops the build before
+any tarball is written.
+--selftest      also unpacks the result and runs install.sh against it.
+--run-local     does ONLY the local check: stages bundle/ into a temp dir,
+                brings the stack up with docker compose, checks the HTTPS
+                login page and an API login, tears it down. No tarball.
+--no-run-local  skips the local check and packages straight away.
 EOF
 }
 
@@ -466,11 +469,12 @@ mark_unverified_on_exit() {
 }
 
 main() {
-    local selftest=0 run_local_only=0 version
+    local selftest=0 run_local_only=0 skip_run_local=0 version
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --selftest) selftest=1 ;;
             --run-local) run_local_only=1 ;;
+            --no-run-local) skip_run_local=1 ;;
             -h|--help) usage; exit 0 ;;
             *) die "Unknown argument: $1 (see --help)" ;;
         esac
@@ -478,6 +482,9 @@ main() {
     done
     if [[ "$selftest" -eq 1 && "$run_local_only" -eq 1 ]]; then
         die "--run-local and --selftest are mutually exclusive: --run-local never builds a tarball, so there is nothing for --selftest to test."
+    fi
+    if [[ "$run_local_only" -eq 1 && "$skip_run_local" -eq 1 ]]; then
+        die "--run-local and --no-run-local are mutually exclusive."
     fi
 
     load_versions "$VERSIONS_FILE"
@@ -490,6 +497,18 @@ main() {
     if [[ "$run_local_only" -eq 1 ]]; then
         run_local
         return 0
+    fi
+
+    # The local check runs before packaging by default so a broken bundle/
+    # fails here, in the time it takes the stack to boot, rather than after
+    # the save/tar work -- and before any tarball exists in dist/, so unlike
+    # the post-package selftest there is nothing to rename on failure.
+    # Bare call, not a conditional, so run_local's subshell keeps errexit
+    # (see mark_unverified_on_exit above for why that matters).
+    if [[ "$skip_run_local" -eq 0 ]]; then
+        run_local
+    else
+        log_info "Skipping the local pre-package check (--no-run-local)"
     fi
 
     local tarball
